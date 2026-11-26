@@ -102,7 +102,7 @@ test("prefers exact code matches when resolving a query", () => {
 
 test("ships the default instruments and a resolve endpoint", () => {
   assert.equal(name, "dsh-market-indices");
-  for (const secid of ["1.000001", "0.399006", "100.HSI", "1.000300", "1.513050", "1.513120", "0.159813", "1.512760"]) {
+  for (const secid of ["1.000001", "0.399006", "100.HSI", "100.NDX", "100.SPX"]) {
     assert.ok(source.includes(secid), `missing instrument ${secid}`);
     assert.ok(DEFAULT_INSTRUMENTS.some((item) => item.secid === secid));
   }

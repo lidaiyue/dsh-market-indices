@@ -1,7 +1,7 @@
 {
   "name": "dsh-market-indices",
-  "version": "0.2.0",
-  "description": "Show a compact, auto-rotating market quote chip in the DSH conversation header.",
+  "version": "0.3.0",
+  "description": "Show a compact, auto-rotating quote chip in the DSH conversation header for the Shanghai, ChiNext, Hang Seng, Nasdaq, and S&P 500 indices.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
