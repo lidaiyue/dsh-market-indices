@@ -1,0 +1,4 @@
+# Mount the market index cards into any DSH profile that lists this bundle.
+- insert:
+    - id: market-indices
+      name: 'dsh-market-indices'

@@ -1,0 +1,57 @@
+{
+  "name": "dsh-market-indices",
+  "version": "0.2.0",
+  "description": "Show a compact, auto-rotating market quote chip in the DSH conversation header.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  },
+  "author": "lidaiyue",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lidaiyue/dsh-market-indices.git"
+  },
+  "homepage": "https://github.com/lidaiyue/dsh-market-indices#readme",
+  "bugs": {
+    "url": "https://github.com/lidaiyue/dsh-market-indices/issues"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "stocks",
+    "market",
+    "index",
+    "shanghai",
+    "chinext"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
