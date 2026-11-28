@@ -158,3 +158,120 @@ test("mounts GET-only handlers and rejects untrusted origins", async () => {
   assert.equal((await request("/plugins/dsh-market-indices/resolve", "GET", { host: "example.com", origin: "https://example.com" }, "/?q=513050")).status, 403);
   assert.equal((await request("/plugins/dsh-market-indices/status", "GET", local, "/?secids=bad")).status, 400);
 });
+
+function mountHandlers() {
+  const handlers = {};
+  apply({
+    inject: (services, callback) => callback({
+      effect: (effect) => effect(),
+      webServer: { register: (route) => { handlers[route.path] = route.handler; return () => {}; } },
+    }),
+  });
+  return handlers;
+}
+
+async function callStatus(handlers, url, headers = { host: "127.0.0.1:3080" }) {
+  const result = {};
+  const res = {
+    writeHead: (status) => { result.status = status; },
+    end: (body) => { result.body = JSON.parse(body); },
+  };
+  await handlers["/plugins/dsh-market-indices/status"]({ method: "GET", headers, url }, res);
+  return result;
+}
+
+function tencentLine(symbol, name, code, price, prev, change, percent) {
+  const fields = Array(33).fill("");
+  fields[1] = name;
+  fields[2] = code;
+  fields[3] = String(price);
+  fields[4] = String(prev);
+  fields[30] = "20261127150000";
+  fields[31] = String(change);
+  fields[32] = String(percent);
+  return `v_${symbol}="${fields.join("~")}";`;
+}
+
+test("rejects blank Eastmoney fields instead of treating them as zero", () => {
+  const instrument = { id: "moutai", secid: "1.600519", code: "600519", name: "贵州茅台", digits: 2 };
+  const row = { f2: 1800, f3: 0.56, f4: 10, f12: "600519", f13: 1, f14: "贵州茅台", f18: 1790 };
+  assert.throws(() => parseUlistRow({ ...row, f2: "" }, instrument));
+  assert.throws(() => parseUlistRow({ ...row, f3: null }, instrument));
+  assert.throws(() => parseUlistRow({ ...row, f4: "   " }, instrument));
+  assert.throws(() => parseUlistRow({ ...row, f2: false }, instrument));
+  const quote = parseUlistRow({ ...row, f18: "" }, instrument);
+  assert.equal(quote.price, 1800);
+  assert.equal(quote.previousClose, null);
+  const missingClose = parseUlistRow({ ...row, f18: null }, instrument);
+  assert.equal(missingClose.previousClose, null);
+});
+
+test("keeps valid Eastmoney quotes when the Tencent fallback throws", async (t) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("push2.eastmoney.com")) {
+      return Response.json({
+        data: {
+          diff: [{ f2: 3533.79, f3: -1.23, f4: -43.83, f12: "000001", f13: 1, f14: "上证指数", f18: 3577.62 }],
+        },
+      });
+    }
+    if (href.includes("qt.gtimg.cn")) throw new Error("fetch failed");
+    throw new Error(`unexpected url ${href}`);
+  };
+  t.after(() => { globalThis.fetch = original; });
+  const result = await callStatus(mountHandlers(), "/?secids=1.000001,145.10");
+  assert.equal(result.status, 200);
+  assert.equal(result.body.quotes.length, 2);
+  assert.equal(result.body.quotes[0].price, 3533.79);
+  assert.equal(result.body.quotes[0].source, "eastmoney");
+  assert.equal(result.body.quotes[0].error, undefined);
+  assert.equal(result.body.quotes[1].secid, "145.10");
+  assert.ok(result.body.quotes[1].error);
+});
+
+test("allows an IPv6 loopback Origin", async (t) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw Object.assign(new Error("fetch failed"), { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) });
+  };
+  t.after(() => { globalThis.fetch = original; });
+  const result = await callStatus(mountHandlers(), "/?secids=145.10", {
+    host: "[::1]:3080",
+    origin: "http://[::1]:3080",
+  });
+  assert.equal(result.status, 502);
+  assert.equal(result.body.sourceError.kind, "blocked");
+});
+
+test("falls back to Tencent for custom A-share and Hong Kong codes", async (t) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("push2.eastmoney.com")) {
+      throw Object.assign(new Error("fetch failed"), { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) });
+    }
+    if (href.includes("qt.gtimg.cn")) {
+      const body = [
+        tencentLine("sh600519", "Kweichow Moutai", "600519", 1800, 1790, 10, 0.56),
+        tencentLine("hk00700", "Tencent", "00700", 320, 310, 10, 3.23),
+        tencentLine("usAAPL", "Apple", "AAPL.OQ", 190.5, 188, 2.5, 1.33),
+      ].join("");
+      return new Response(body);
+    }
+    throw new Error(`unexpected url ${href}`);
+  };
+  t.after(() => { globalThis.fetch = original; });
+  const result = await callStatus(mountHandlers(), "/?secids=1.600519,116.00700,105.AAPL");
+  assert.equal(result.status, 200);
+  const bySecid = Object.fromEntries(result.body.quotes.map((quote) => [quote.secid, quote]));
+  assert.equal(bySecid["1.600519"].price, 1800);
+  assert.equal(bySecid["1.600519"].source, "tencent");
+  assert.equal(bySecid["1.600519"].changePercent, 0.56);
+  assert.equal(bySecid["116.00700"].price, 320);
+  assert.equal(bySecid["116.00700"].code, "00700");
+  assert.equal(bySecid["116.00700"].source, "tencent");
+  assert.equal(bySecid["105.AAPL"].price, 190.5);
+  assert.equal(bySecid["105.AAPL"].source, "tencent");
+});

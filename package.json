@@ -3,6 +3,9 @@
   "version": "0.3.0",
   "description": "Show a compact, auto-rotating quote chip in the DSH conversation header for the Shanghai, ChiNext, Hang Seng, Nasdaq, and S&P 500 indices.",
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
